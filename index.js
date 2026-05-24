@@ -29,11 +29,6 @@ app.post("/evaluate", upload.single("audio"), async (req, res) => {
 
     const transcription = await transcribeAudio(req.file.path);
 
-    console.log({
-      expectedText,
-      transcription
-    });
-
     const scores = calculateScores(
       expectedText,
       transcription
