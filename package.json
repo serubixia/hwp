@@ -1,0 +1,16 @@
+{
+  "name": "tts-hallucination-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "express": "^4.19.2",
+    "form-data": "^4.0.0",
+    "multer": "^1.4.5-lts.1",
+    "string-similarity": "^4.0.4",
+    "fast-levenshtein": "^3.0.0"
+  }
+}
