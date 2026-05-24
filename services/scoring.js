@@ -10,7 +10,12 @@ function normalize(text) {
 
 export function calculateScores(expected, actual) {
 
-  const ref = normalize(expected);
+  // Reemplaza "..." y "…" por ","
+  const cleanedExpected = expected
+    .replace(/\.\.\./g, ",")
+    .replace(/…/g, ",");
+
+  const ref = normalize(cleanedExpected);
   const hyp = normalize(actual);
 
   const similarity =
