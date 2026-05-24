@@ -24,7 +24,5 @@ export async function transcribeAudio(filePath) {
     }
   );
 
-  console.log(JSON.stringify(response.data, null, 2));
-
-  return response.data.text;
+  return response.data;
 }
