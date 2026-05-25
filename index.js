@@ -5,7 +5,7 @@ import fs from "fs";
 import { transcribeAudio } from "./services/whisper.js";
 import { calculateScores } from "./services/scoring.js";
 import { detectSilence } from "./services/silence.js";
-import { detectArtifacts } from "./services/audioArtifacts.js";
+import { detectTtsArtifacts } from "./services/ttsArtifactDetector.js";
 
 const app = express();
 
@@ -30,7 +30,7 @@ app.post("/evaluate", upload.single("audio"), async (req, res) => {
     }
 
     const silenceInfo = await detectSilence(req.file.path);
-    const artifacts = await detectArtifacts(req.file.path);
+    const artifacts = await detectTtsArtifacts(req.file.path);
     const transcription = await transcribeAudio(req.file.path);
 
     const scores = calculateScores(
@@ -44,7 +44,7 @@ app.post("/evaluate", upload.single("audio"), async (req, res) => {
       expectedText,
       transcription,
       ...scores,
-      artifactDetected: artifacts.artifactDetected,
+      artifacts,
       silence: silenceInfo.hasSilenceOver1s
     });
 
