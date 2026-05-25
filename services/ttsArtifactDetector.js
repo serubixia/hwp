@@ -1,6 +1,8 @@
 import { spawn } from "child_process";
+import { fft } from "fft-js";
 
 export function detectTtsArtifacts(filePath) {
+
   return new Promise((resolve, reject) => {
 
     const ffmpeg = spawn("ffmpeg", [
@@ -14,7 +16,7 @@ export function detectTtsArtifacts(filePath) {
 
     const chunks = [];
 
-    ffmpeg.stdout.on("data", (chunk) => {
+    ffmpeg.stdout.on("data", chunk => {
       chunks.push(chunk);
     });
 
@@ -23,98 +25,100 @@ export function detectTtsArtifacts(filePath) {
     ffmpeg.on("close", () => {
 
       const buffer = Buffer.concat(chunks);
+
       const samples = new Int16Array(
         buffer.buffer,
         buffer.byteOffset,
         buffer.length / 2
       );
 
-      let spikes = 0;
-      let energySpikes = 0;
-      let clipping = 0;
-      let zeroCrossings = 0;
+      const frameSize = 512;
+      const hopSize = 256;
 
-      const windowSize = 160; // 10ms @16kHz
+      let spectralFluxValues = [];
+
+      let prevSpectrum = null;
 
       // =========================
-      // 1. SPIKES + CLIPPING
+      // FFT ANALYSIS
       // =========================
-      for (let i = 1; i < samples.length; i++) {
 
-        const prev = samples[i - 1];
-        const curr = samples[i];
+      for (let i = 0; i + frameSize < samples.length; i += hopSize) {
 
-        const diff = Math.abs(curr - prev);
+        const frame = [];
 
-        // ⚡ spikes más razonables (normalizado)
-        if (diff > 12000) {
-          spikes++;
+        for (let j = 0; j < frameSize; j++) {
+
+          // normalizar -1..1
+          frame.push(samples[i + j] / 32768);
         }
 
-        // 🔴 clipping real
-        if (Math.abs(curr) > 32000) {
-          clipping++;
+        // FFT
+        const phasors = fft(frame);
+
+        // magnitudes
+        const spectrum = phasors.map(([re, im]) => {
+          return Math.sqrt(re * re + im * im);
+        });
+
+        // =========================
+        // SPECTRAL FLUX
+        // =========================
+
+        if (prevSpectrum) {
+
+          let flux = 0;
+
+          for (let k = 0; k < spectrum.length; k++) {
+
+            const diff = spectrum[k] - prevSpectrum[k];
+
+            // solo cambios positivos
+            if (diff > 0) {
+              flux += diff;
+            }
+          }
+
+          spectralFluxValues.push(flux);
         }
 
-        // 🔄 zero crossing (cambio de signo)
-        if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0)) {
-          zeroCrossings++;
-        }
+        prevSpectrum = spectrum;
       }
 
       // =========================
-      // 2. ENERGY POR VENTANA
+      // ESTADÍSTICAS
       // =========================
-      let maxEnergy = 0;
-      const energies = [];
 
-      for (let i = 0; i < samples.length; i += windowSize) {
+      const meanFlux =
+        spectralFluxValues.reduce((a, b) => a + b, 0) /
+        (spectralFluxValues.length || 1);
 
-        let energy = 0;
+      const maxFlux = Math.max(...spectralFluxValues);
 
-        for (let j = i; j < i + windowSize && j < samples.length; j++) {
-          energy += Math.abs(samples[j]);
-        }
+      // detectar glitches extremos
+      let artifactFrames = 0;
 
-        const avgEnergy = energy / windowSize;
-        energies.push(avgEnergy);
+      for (const flux of spectralFluxValues) {
 
-        if (avgEnergy > maxEnergy) {
-          maxEnergy = avgEnergy;
+        if (flux > meanFlux * 3.5) {
+          artifactFrames++;
         }
       }
 
-      const meanEnergy =
-        energies.reduce((a, b) => a + b, 0) / (energies.length || 1);
-
-      // detectar picos relativos (no absolutos)
-      for (const e of energies) {
-        if (e > meanEnergy * 2.5) {
-          energySpikes++;
-        }
-      }
-
-      // =========================
-      // 3. QUALITY SCORE MEJORADO
-      // =========================
-      const artifactScore =
-        spikes * 0.08 +
-        energySpikes * 0.12 +
-        clipping * 0.2;
-
-      const qualityScore = Math.max(0, 1 - artifactScore);
+      // score
+      const qualityScore = Math.max(
+        0,
+        1 - artifactFrames * 0.03
+      );
 
       const artifactDetected =
-        clipping > 5 ||
-        spikes > 10 ||
-        energySpikes > 6;
+        artifactFrames > 4;
 
       resolve({
         artifactDetected,
-        spikes,
-        energySpikes,
-        clipping,
-        zeroCrossings,
+        artifactFrames,
+        meanFlux,
+        maxFlux,
         qualityScore
       });
     });
