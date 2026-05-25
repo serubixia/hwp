@@ -22,24 +22,24 @@ export function detectArtifacts(filePath) {
 
     ffmpeg.on("close", () => {
 
-      const peakMatches =
-        stderr.match(/Peak level dB: ([\-\d\.]+)/g) || [];
+      // 👇 más robusto: capturar Peak_level con diferentes formatos
+      const peaks = [...stderr.matchAll(/Peak[_ ]level.*?(-?\d+(\.\d+)?)/g)];
 
-      let suspicious = false;
+      let artifactDetected = false;
 
-      for (const match of peakMatches) {
+      for (const p of peaks) {
 
-        const value =
-          parseFloat(match.split(":")[1]);
+        const value = parseFloat(p[1]);
 
-        if (value > -1) {
-          suspicious = true;
+        // umbral más realista
+        if (value > -1.5) {
+          artifactDetected = true;
           break;
         }
       }
 
       resolve({
-        artifactDetected: suspicious,
+        artifactDetected,
         raw: stderr
       });
     });
