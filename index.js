@@ -4,6 +4,7 @@ import fs from "fs";
 
 import { transcribeAudio } from "./services/whisper.js";
 import { calculateScores } from "./services/scoring.js";
+import { detectSilence } from "./services/silence.js";
 
 const app = express();
 
@@ -27,6 +28,8 @@ app.post("/evaluate", upload.single("audio"), async (req, res) => {
       });
     }
 
+    const silenceInfo = await detectSilence(req.file.path);
+
     const transcription = await transcribeAudio(req.file.path);
 
     const scores = calculateScores(
@@ -39,7 +42,8 @@ app.post("/evaluate", upload.single("audio"), async (req, res) => {
     return res.json({
       expectedText,
       transcription,
-      ...scores
+      ...scores,
+      silence: silenceInfo.hasSilenceOver1s
     });
 
   } catch (err) {
